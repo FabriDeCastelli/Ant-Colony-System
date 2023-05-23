@@ -1,8 +1,8 @@
 #define _GNU_SOURCE 
 #include <dirent.h>
-#include <errno.h> // error handling
+#include <errno.h>
 #include <math.h>
-#include <stdbool.h> // booleans
+#include <stdbool.h>
 #include <stdio.h>   
 #include <stdlib.h> 
 #include <string.h>  
@@ -12,11 +12,9 @@
 #define HERE __LINE__, __FILE__
 #define MAX_LINE_LENGTH 256
 
-typedef struct {
-  int city;
-  int cost;
-} data;
-
+/** 
+ * Data structure to store an instance of the TSP problem.
+ */
 typedef struct {
   char name[MAX_LINE_LENGTH];
   int dimension;
@@ -24,26 +22,71 @@ typedef struct {
   FILE *file;
 } instance;
 
+/** 
+ * Data structure to store the x and y coordinates of a city.
+ */
 typedef struct {
+  /**
+   * x coordinate of the city.
+   */
   double x;
+  /**
+   * y coordinate of the city.
+   */
   double y;
 } city;
 
+/** 
+ * Data structure to store all information regarding an ant.
+ */
 typedef struct {
+  /**
+   * The starting city of the ant.
+  */
   int starting_city;
+  /**
+   * The current city of the ant.
+  */
   int current_city;
+  /**
+   * The next city the ant is going to move.
+  */
   int next_city;
+  /**
+   * The already visited cities in the ant's tour.
+  */
   int *tour;
+  /**
+   * Not yet visited cities by the ant.
+  */
   int *not_visited;
+  /**
+   * How many cities are left to visit.
+  */
   int nv_len;
 } ant;
 
+/** 
+ * Data structure to store the cost and pheromone of an edge.
+ */
 typedef struct {
+  /**
+   * The cost of the edge.
+  */
   int cost;
+  /**
+   * The pheromone deposited in the edge.
+  */
   double pheromone;
 } edge;
 
-/** Stops the program in case of error and prints where the error occured */
+/** 
+ * Prints an error message and exits, used to debug.
+ * 
+ * @param message the message to be printed
+ * @param line the line where the error occurred
+ * @param file the file where the error occurred
+ */
 void stop(const char *message, int line, char *file) {
   if (errno == 0)
     fprintf(stderr, "== %d == %s\n", getpid(), message);
@@ -53,35 +96,68 @@ void stop(const char *message, int line, char *file) {
   exit(1);
 }
 
-/** Computes the Euclidian distance of two cities, return value is rounded */
+/** 
+ * Computes the euclidean distance between two cities.
+ * 
+ * @param a the first city
+ * @param b the second city
+ * 
+ * @return the distance between the two cities rounded to the closest integer.
+ */
 int distance(city a, city b) {
   double x = pow(a.x - b.x, 2);
   double y = pow(a.y - b.y, 2);
   return round(sqrt(x + y));
 }
 
-/** Print cities position */
+/** 
+ * Prints the euclidean position of the cities.
+ * 
+ * @param a the array of cities
+ * @param n the number of cities
+ * @param f the file where to print the cities
+ */
 void print_cities(city *a, int n, FILE *f) {
   for (int i = 0; i < n; i++)
     fprintf(f, "x: %.10f, y: %.10f\n", a[i].x, a[i].y);
-    //fprintf(f, "array[%d]: %8d\n", i, a[i]);
 }
 
-/** Print a tour in file f */
+/**
+ * Prints the tour.
+ * 
+ * @param a the array of cities
+ * @param n the number of cities
+ * @param f the file where to print the tour
+*/
 void print_tour(int *a, int n, FILE *f) {
   for (int i = 0; i < n - 1; i++)
     fprintf(f, "%d -> ", a[i]);
-    //fprintf(f, "array[%d]: %8d\n", i, a[i]);
   printf("%d\n", a[n-1]);
 }
 
-/** set pheromone at position (row, column) */
+/** 
+ * Sets pheromone at position (row, column) and (column, row).
+ * 
+ * @param dim the dimension of the matrix
+ * @param matrix the matrix to be modified
+ * @param row the row of the matrix
+ * @param column the column of the matrix
+ * @param pheromone the pheromone to be set
+ */
 void set_pheromone(int dim, edge matrix[][dim], int row, int column, double pheromone) {
   matrix[row][column].pheromone = pheromone;
   matrix[column][row].pheromone = pheromone;
 }
 
-/** set pheromone and distance at position (row, column) */
+/**
+ * Sets cost and pheromone at position (row, column) and (column, row).
+ * 
+ * @param dim the dimension of the matrix
+ * @param matrix the matrix to be modified
+ * @param row the row of the matrix
+ * @param column the column of the matrix
+ * @param data the data to be set
+ */
 void set_values(int dim, edge matrix[][dim], int row, int column, edge data) {
   matrix[row][column].pheromone = data.pheromone;
   matrix[column][row].pheromone = data.pheromone;
@@ -89,13 +165,26 @@ void set_values(int dim, edge matrix[][dim], int row, int column, edge data) {
   matrix[column][row].cost = data.cost;
 }
 
-/** states if a file ends with .tsp extension  */
+/** 
+ * Tells if a file has .tsp extension.
+ *  
+ * @param name the name of the file
+ * 
+ * @return true if the file has .tsp extension, false otherwise
+ */
 bool has_tsp_extension(char const *name) {
   size_t len = strlen(name);
   return len > 4 && strcmp(name + len - 4, ".tsp") == 0;
 }
 
-
+/**
+ * Nearest Neighbor algorithm.
+ * 
+ * @param cities the array of cities
+ * @param N_CITIES the number of cities
+ * 
+ * @return the length of the tour
+*/
 int NN(city *cities, int N_CITIES) { 
   
   int random_city = rand() % N_CITIES;
@@ -139,7 +228,13 @@ int NN(city *cities, int N_CITIES) {
   return length;
 }
 
-/** Get all useful data from a TSP instance */
+/** 
+ * Gets useful information from TSP instances.
+ * 
+ * @param instance the instance to be read
+ * 
+ * @return a pointer to a city array containing the coordinates of the cities
+ */
 city *get_coordinates(instance *instance) {
 
   printf("Instance: %s\n", instance->name);
@@ -150,27 +245,21 @@ city *get_coordinates(instance *instance) {
 
   city *c = NULL;
   
-  // read lines until EOF
+  // Read lines until EOF
   while (fgets(line, MAX_LINE_LENGTH, instance->file) != NULL) {
-    
-    //printf("Reading %s\n", line);
-    if (strncmp(line, "NAME", 4) == 0)
+  
+    if (strncmp(line, "NAME", 4) == 0) {
       sscanf(line, "NAME : %s", instance->name);
-
-    else if (strncmp(line, "BEST_KNOWN", 10) == 0) {
+    } else if (strncmp(line, "BEST_KNOWN", 10) == 0) {
       sscanf(line, "BEST_KNOWN : %s", best_known);
       instance->best_known = atoi(best_known);
-    }
-
-    else if (strncmp(line, "DIMENSION", 9) == 0) {
+    } else if (strncmp(line, "DIMENSION", 9) == 0) {
       sscanf(line, "DIMENSION : %s", dimension);
       instance->dimension = atoi(dimension);
       c = (city *) malloc(instance->dimension * sizeof(city));
       if (c == NULL)
         stop("Insufficient Memory", HERE);
-    } 
-    
-    else if (strncmp(line, "NODE_COORD_SECTION", 18) == 0)
+    } else if (strncmp(line, "NODE_COORD_SECTION", 18) == 0)
       for (int i = 0; i < instance->dimension; i++)
         if(fgets(line, MAX_LINE_LENGTH, instance->file) != NULL)
           sscanf(line, "%*d %lf %lf", &c[i].x, &c[i].y);
